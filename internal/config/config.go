@@ -1,8 +1,11 @@
 package config
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -12,6 +15,7 @@ import (
 type Config struct {
 	Name            string
 	Environment     string
+	GinMode         string
 	Port            string
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
@@ -20,13 +24,28 @@ type Config struct {
 	LogLevel        string
 	MetricsEnabled  bool
 	TracingEnabled  bool
-	DatabaseEnabled bool
+	Database        DatabaseConfig
 	RedisEnabled    bool
 	MinIOEnabled    bool
 	TrustedProxies  []string
 }
 
+type DatabaseConfig struct {
+	Enabled           bool
+	URL               string
+	MaxConns          int32
+	MinConns          int32
+	ConnectTimeout    time.Duration
+	MaxConnLifetime   time.Duration
+	MaxConnIdleTime   time.Duration
+	HealthCheckPeriod time.Duration
+}
+
 func Load() (Config, error) {
+	if err := loadDotEnv(".env"); err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
 		Name:            getEnv("APP_NAME", "go-backend-template"),
 		Environment:     getEnv("APP_ENV", "development"),
@@ -36,6 +55,15 @@ func Load() (Config, error) {
 		IdleTimeout:     60 * time.Second,
 		ShutdownTimeout: 15 * time.Second,
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
+		Database: DatabaseConfig{
+			URL:               getEnv("DATABASE_URL", ""),
+			MaxConns:          10,
+			MinConns:          1,
+			ConnectTimeout:    3 * time.Second,
+			MaxConnLifetime:   30 * time.Minute,
+			MaxConnIdleTime:   5 * time.Minute,
+			HealthCheckPeriod: 1 * time.Minute,
+		},
 	}
 
 	var err error
@@ -57,7 +85,25 @@ func Load() (Config, error) {
 	if cfg.TracingEnabled, err = getBool("TRACING_ENABLED", false); err != nil {
 		return Config{}, err
 	}
-	if cfg.DatabaseEnabled, err = getBool("DATABASE_ENABLED", false); err != nil {
+	if cfg.Database.Enabled, err = getBool("DATABASE_ENABLED", false); err != nil {
+		return Config{}, err
+	}
+	if cfg.Database.MaxConns, err = getInt32("DATABASE_MAX_CONNS", cfg.Database.MaxConns); err != nil {
+		return Config{}, err
+	}
+	if cfg.Database.MinConns, err = getInt32("DATABASE_MIN_CONNS", cfg.Database.MinConns); err != nil {
+		return Config{}, err
+	}
+	if cfg.Database.ConnectTimeout, err = getDuration("DATABASE_CONNECT_TIMEOUT", cfg.Database.ConnectTimeout); err != nil {
+		return Config{}, err
+	}
+	if cfg.Database.MaxConnLifetime, err = getDuration("DATABASE_MAX_CONN_LIFETIME", cfg.Database.MaxConnLifetime); err != nil {
+		return Config{}, err
+	}
+	if cfg.Database.MaxConnIdleTime, err = getDuration("DATABASE_MAX_CONN_IDLE_TIME", cfg.Database.MaxConnIdleTime); err != nil {
+		return Config{}, err
+	}
+	if cfg.Database.HealthCheckPeriod, err = getDuration("DATABASE_HEALTH_CHECK_PERIOD", cfg.Database.HealthCheckPeriod); err != nil {
 		return Config{}, err
 	}
 	if cfg.RedisEnabled, err = getBool("REDIS_ENABLED", false); err != nil {
@@ -74,7 +120,12 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("APP_NAME must not be empty")
 	}
 	switch cfg.Environment {
-	case "development", "staging", "production", "test":
+	case "production":
+		cfg.GinMode = "release"
+	case "test":
+		cfg.GinMode = "test"
+	case "development", "staging":
+		cfg.GinMode = "debug"
 	default:
 		return Config{}, fmt.Errorf("APP_ENV must be development, staging, production, or test")
 	}
@@ -87,8 +138,8 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("LOG_LEVEL must be debug, info, warn, or error")
 	}
 
-	if cfg.DatabaseEnabled {
-		return Config{}, fmt.Errorf("DATABASE_ENABLED is not yet supported in this phase")
+	if err := validateDatabaseConfig(cfg.Database); err != nil {
+		return Config{}, err
 	}
 	if cfg.RedisEnabled {
 		return Config{}, fmt.Errorf("REDIS_ENABLED is not yet supported in this phase")
@@ -101,6 +152,29 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func validateDatabaseConfig(db DatabaseConfig) error {
+	if db.MaxConns < 1 {
+		return fmt.Errorf("DATABASE_MAX_CONNS must be at least 1")
+	}
+	if db.MinConns < 0 {
+		return fmt.Errorf("DATABASE_MIN_CONNS must not be negative")
+	}
+	if db.MinConns > db.MaxConns {
+		return fmt.Errorf("DATABASE_MIN_CONNS must not exceed DATABASE_MAX_CONNS")
+	}
+	if !db.Enabled {
+		return nil
+	}
+	if db.URL == "" {
+		return fmt.Errorf("DATABASE_URL is required when DATABASE_ENABLED=true")
+	}
+	u, err := url.Parse(db.URL)
+	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Host == "" {
+		return fmt.Errorf("DATABASE_URL must be a valid postgres:// or postgresql:// URI")
+	}
+	return nil
 }
 
 func getEnv(key, fallback string) string {
@@ -129,6 +203,22 @@ func getBool(key string, fallback bool) (bool, error) {
 		return false, fmt.Errorf("%s must be a valid boolean", key)
 	}
 	return parsed, nil
+}
+
+func getInt32(key string, fallback int32) (int32, error) {
+	value, ok := os.LookupEnv(key)
+	if !ok {
+		return fallback, nil
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseInt(trimmed, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a valid 32-bit integer", key)
+	}
+	return int32(parsed), nil
 }
 
 func getDuration(key string, fallback time.Duration) (time.Duration, error) {
@@ -179,4 +269,47 @@ func getTrustedProxies(key string) ([]string, error) {
 		proxies = append(proxies, p)
 	}
 	return proxies, nil
+}
+
+// loadDotEnv reads KEY=VALUE pairs from path if the file exists and sets any
+// environment variables that are not already present in the process environment.
+func loadDotEnv(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("open %s: %w", path, err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "export ")
+		key, val, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		val = strings.TrimSpace(val)
+		if len(val) >= 2 {
+			if (val[0] == '"' && val[len(val)-1] == '"') || (val[0] == '\'' && val[len(val)-1] == '\'') {
+				val = val[1 : len(val)-1]
+			}
+		}
+		if key == "" {
+			continue
+		}
+		if _, exists := os.LookupEnv(key); !exists {
+			_ = os.Setenv(key, val)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+	return nil
 }

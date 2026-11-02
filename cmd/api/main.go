@@ -8,9 +8,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/moonrill/go-backend-template/internal/config"
+	"github.com/moonrill/go-backend-template/internal/platform/postgres"
 	"github.com/moonrill/go-backend-template/internal/server"
 )
 
@@ -27,14 +27,29 @@ func main() {
 	logger := newLogger(cfg.LogLevel)
 	slog.SetDefault(logger)
 
-	srv, err := server.New(cfg, logger)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	var deps server.Dependencies
+	if cfg.Database.Enabled {
+		dbPool, err := postgres.NewPool(ctx, cfg.Database)
+		if err != nil {
+			logger.Error("database initialization failed", "error", err)
+			os.Exit(1)
+		}
+		defer func() {
+			dbPool.Close()
+			logger.Info("database connection pool closed")
+		}()
+		deps.DB = dbPool
+		logger.Info("database connection pool initialized", "max_conns", cfg.Database.MaxConns)
+	}
+
+	srv, err := server.New(cfg, logger, deps)
 	if err != nil {
 		logger.Error("server initialization failed", "error", err)
 		os.Exit(1)
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -76,7 +91,3 @@ func newLogger(level string) *slog.Logger {
 	}
 	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: l}))
 }
-
-// Keep the time package referenced for an explicit default-duration convention
-// when adding lifecycle operations in later phases.
-var _ = time.Second

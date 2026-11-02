@@ -23,6 +23,12 @@ func testConfig() config.Config {
 		ShutdownTimeout: 5 * time.Second,
 		LogLevel:        "info",
 		MetricsEnabled:  true,
+		Database: config.DatabaseConfig{
+			Enabled:        false,
+			MaxConns:       5,
+			MinConns:       1,
+			ConnectTimeout: time.Second,
+		},
 	}
 }
 
@@ -49,6 +55,24 @@ func TestServerHealthAndMetrics(t *testing.T) {
 	srv.Handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /metrics status = %d, want 200", rec.Code)
+	}
+}
+
+func TestServerReadyFailsWhenDatabaseEnabledButUnavailable(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	cfg := testConfig()
+	cfg.Database.Enabled = true
+
+	srv, err := New(cfg, logger, Dependencies{DB: nil})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/health/ready", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("GET /api/v1/health/ready status = %d, want 503", rec.Code)
 	}
 }
 
@@ -95,4 +119,3 @@ func TestServerUntrustedProxyIgnoresForwardedFor(t *testing.T) {
 		t.Fatalf("expected RemoteAddr IP 192.0.2.10 in logs, got: %s", logs)
 	}
 }
-

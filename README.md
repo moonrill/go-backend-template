@@ -5,7 +5,7 @@ A lightweight, modular REST API starter built with Go and Gin.
 ## Goals
 
 - Consistent handler/service/repository boundaries.
-- PostgreSQL via pgx and sqlc (planned integration phase).
+- PostgreSQL via `pgx/v5`, `sqlc`, and versioned SQL migrations.
 - Optional PostgreSQL, Redis, and S3-compatible object storage.
 - Structured logging, health checks, optional Prometheus metrics and tracing.
 - Secure defaults, graceful shutdown, Docker-based development.
@@ -23,16 +23,17 @@ A lightweight, modular REST API starter built with Go and Gin.
 3. Run tests: `go test ./...`
 4. Start the API: `go run ./cmd/api`
 
-The initial scaffold exposes:
+The scaffold currently exposes:
 - `GET /api/v1/health/live`
-- `GET /api/v1/health/ready`
+- `GET /api/v1/health/ready` (includes PostgreSQL readiness when `DATABASE_ENABLED=true`)
+- `GET /api/v1/users`, `GET /api/v1/users/:id`, `POST /api/v1/users`, `PATCH /api/v1/users/:id`, `DELETE /api/v1/users/:id` (when `DATABASE_ENABLED=true`; see [`docs/openapi.yaml`](docs/openapi.yaml))
 - `GET /metrics` when metrics are enabled
 
-The CRUD example and optional integrations are added in subsequent implementation phases. Until then, do not enable a dependency that has not yet been implemented.
+Optional Redis, MinIO, and tracing integrations are added in subsequent implementation phases. Until then, do not enable a dependency that has not yet been implemented.
 
 ## Configuration
 
-See [Configuration](docs/configuration.md).
+See [Configuration](docs/configuration.md) and [Database](docs/database.md).
 
 ## Architecture
 
@@ -48,6 +49,7 @@ See [Security](docs/security.md).
 make fmt
 make test
 make vet
+make build
 make run
 ```
 

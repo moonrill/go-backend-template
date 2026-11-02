@@ -126,4 +126,3 @@ func TestRecoveryAndAccessLogOrder(t *testing.T) {
 		t.Errorf("expected access log entry with status 500, got: %s", logs)
 	}
 }
-

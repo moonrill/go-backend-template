@@ -1,0 +1,380 @@
+openapi: 3.0.3
+info:
+  title: Go Backend Template API
+  version: 1.0.0
+  description: |
+    Reusable Go REST API starter built with Gin, PostgreSQL (`pgx/v5`), and `sqlc`.
+    Note: `/api/v1/users` endpoints are registered when `DATABASE_ENABLED=true`.
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /api/v1/health/live:
+    get:
+      summary: Liveness probe
+      operationId: getLiveness
+      tags: [Health]
+      responses:
+        "200":
+          description: Process is live
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/v1/health/ready:
+    get:
+      summary: Readiness probe
+      operationId: getReadiness
+      tags: [Health]
+      responses:
+        "200":
+          description: All required dependencies are ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: One or more required dependencies are unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/users:
+    get:
+      summary: List users
+      operationId: listUsers
+      tags: [Users]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [admin, member, viewer]
+        - name: is_active
+          in: query
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          description: Case-insensitive substring match against email or full_name
+          schema:
+            type: string
+            maxLength: 100
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [created_at, full_name, email]
+            default: created_at
+        - name: sort_order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        "200":
+          description: Paginated list of users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      summary: Create a user
+      operationId: createUser
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSingleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get a user by ID
+      operationId: getUserByID
+      tags: [Users]
+      responses:
+        "200":
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSingleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    patch:
+      summary: Partially update a user
+      operationId: updateUser
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSingleResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    delete:
+      summary: Delete a user
+      operationId: deleteUser
+      tags: [Users]
+      responses:
+        "204":
+          description: User deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  schemas:
+    User:
+      type: object
+      required: [id, email, full_name, role, is_active, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        full_name:
+          type: string
+          minLength: 2
+          maxLength: 150
+        role:
+          type: string
+          enum: [admin, member, viewer]
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateUserRequest:
+      type: object
+      required: [email, full_name]
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        full_name:
+          type: string
+          minLength: 2
+          maxLength: 150
+        role:
+          type: string
+          enum: [admin, member, viewer]
+          default: member
+        is_active:
+          type: boolean
+          default: true
+
+    UpdateUserRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        full_name:
+          type: string
+          minLength: 2
+          maxLength: 150
+        role:
+          type: string
+          enum: [admin, member, viewer]
+        is_active:
+          type: boolean
+
+    PageMeta:
+      type: object
+      required: [page, page_size, total_items, total_pages]
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_items:
+          type: integer
+          format: int64
+        total_pages:
+          type: integer
+
+    UserSingleResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          $ref: "#/components/schemas/User"
+
+    UserListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+
+    HealthResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          enum: [true]
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+            checks:
+              type: object
+              additionalProperties:
+                type: string
+
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                $ref: "#/components/schemas/FieldError"
+
+  responses:
+    BadRequest:
+      description: Validation or malformed JSON error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Unique constraint conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PayloadTooLarge:
+      description: Request body exceeds maximum size limit
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
