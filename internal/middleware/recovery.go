@@ -10,8 +10,9 @@ import (
 
 func Recovery(logger *slog.Logger) gin.HandlerFunc {
 	return gin.CustomRecoveryWithWriter(io.Discard, func(c *gin.Context, recovered any) {
+		reqID := c.GetString("request_id")
 		logger.Error("panic recovered",
-			"request_id", c.GetString("request_id"),
+			"request_id", reqID,
 			"method", c.Request.Method,
 			"path", c.Request.URL.Path,
 			"panic", recovered,
@@ -19,8 +20,9 @@ func Recovery(logger *slog.Logger) gin.HandlerFunc {
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error": gin.H{
-				"code":    "INTERNAL_ERROR",
-				"message": "An unexpected error occurred",
+				"code":       "INTERNAL_ERROR",
+				"message":    "An unexpected error occurred",
+				"request_id": reqID,
 			},
 		})
 	})

@@ -57,9 +57,10 @@ func (h *HealthHandler) Ready(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"success": false,
 			"error": gin.H{
-				"code":    "SERVICE_UNAVAILABLE",
-				"message": "One or more required dependencies are unavailable",
-				"checks":  results,
+				"code":       "SERVICE_UNAVAILABLE",
+				"message":    "One or more required dependencies are unavailable",
+				"request_id": c.GetString("request_id"),
+				"checks":     results,
 			},
 		})
 		return

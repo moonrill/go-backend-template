@@ -36,8 +36,9 @@ func JSONPaginated(c *gin.Context, status int, data any, meta PageMeta) {
 // JSONError writes a standard JSON error envelope.
 func JSONError(c *gin.Context, status int, code, message string, details ...FieldError) {
 	errObj := gin.H{
-		"code":    code,
-		"message": message,
+		"code":       code,
+		"message":    message,
+		"request_id": c.GetString("request_id"),
 	}
 	if len(details) > 0 {
 		errObj["details"] = details

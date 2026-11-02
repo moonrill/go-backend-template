@@ -117,6 +117,10 @@ func TestRecoveryAndAccessLogOrder(t *testing.T) {
 	if body["success"] != false {
 		t.Errorf("success = %v, want false", body["success"])
 	}
+	errObj, ok := body["error"].(map[string]any)
+	if !ok || errObj["request_id"] != "test-req-12345" {
+		t.Errorf("error.request_id = %v, want test-req-12345", errObj["request_id"])
+	}
 
 	logs := logBuf.String()
 	if !strings.Contains(logs, `"msg":"panic recovered"`) {

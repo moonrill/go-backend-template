@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/moonrill/go-backend-template/internal/middleware"
 	"github.com/moonrill/go-backend-template/internal/modules/users"
 	"github.com/moonrill/go-backend-template/internal/platform/postgres/sqlc"
 )
@@ -130,6 +131,7 @@ func setupTestRouter() *gin.Engine {
 	h := users.NewHandler(svc, logger)
 
 	r := gin.New()
+	r.Use(middleware.RequestID())
 	h.RegisterRoutes(r.Group("/api/v1"))
 	return r
 }
@@ -167,6 +169,20 @@ func TestUsersHandlerCRUDAndValidation(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("duplicate POST status = %d, want 409", rec.Code)
+	}
+	var conflictResp struct {
+		Success bool `json:"success"`
+		Error   struct {
+			Code      string `json:"code"`
+			Message   string `json:"message"`
+			RequestID string `json:"request_id"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &conflictResp); err != nil {
+		t.Fatalf("unmarshal conflict response: %v", err)
+	}
+	if conflictResp.Error.RequestID == "" {
+		t.Fatal("expected non-empty request_id in error response")
 	}
 
 	// 3. Unknown JSON field rejected with 400
