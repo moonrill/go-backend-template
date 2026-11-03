@@ -6,7 +6,7 @@ The template uses a modular monolith with a small layered architecture.
 
 `HTTP -> middleware -> router -> handler -> service -> repository -> dependency`
 
-The template includes health endpoints and an example `users` CRUD module (`internal/modules/users`) backed by PostgreSQL and `sqlc`. Optional Redis, MinIO, and OpenTelemetry tracing integrations are planned implementation phases; do not assume they are already implemented.
+The template includes health endpoints, an example `users` CRUD module (`internal/modules/users`) backed by PostgreSQL and `sqlc`, an optional Redis integration (`internal/platform/redis`) for caching, and an optional MinIO integration (`internal/platform/storage/minio`) for S3-compatible object storage. An optional OpenTelemetry tracing integration is a planned implementation phase; do not assume it is already implemented.
 
 ## Folder responsibilities
 

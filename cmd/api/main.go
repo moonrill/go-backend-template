@@ -11,6 +11,8 @@ import (
 
 	"github.com/moonrill/go-backend-template/internal/config"
 	"github.com/moonrill/go-backend-template/internal/platform/postgres"
+	"github.com/moonrill/go-backend-template/internal/platform/redis"
+	"github.com/moonrill/go-backend-template/internal/platform/storage/minio"
 	"github.com/moonrill/go-backend-template/internal/server"
 )
 
@@ -43,6 +45,40 @@ func main() {
 		}()
 		deps.DB = dbPool
 		logger.Info("database connection pool initialized", "max_conns", cfg.Database.MaxConns)
+	}
+
+	if cfg.Redis.Enabled {
+		redisClient, err := redis.New(ctx, cfg.Redis)
+		if err != nil {
+			logger.Error("redis initialization failed", "error", err)
+			os.Exit(1)
+		}
+		defer func() {
+			if err := redisClient.Close(); err != nil {
+				logger.Warn("redis close failed", "error", err)
+			} else {
+				logger.Info("redis client closed")
+			}
+		}()
+		deps.Redis = redisClient
+		logger.Info("redis client initialized", "db", cfg.Redis.DB, "pool_size", cfg.Redis.PoolSize)
+	}
+
+	if cfg.MinIO.Enabled {
+		minioClient, err := minio.New(ctx, cfg.MinIO)
+		if err != nil {
+			logger.Error("minio initialization failed", "error", err)
+			os.Exit(1)
+		}
+		defer func() {
+			if err := minioClient.Close(); err != nil {
+				logger.Warn("minio close failed", "error", err)
+			} else {
+				logger.Info("minio client closed")
+			}
+		}()
+		deps.MinIO = minioClient
+		logger.Info("minio client initialized", "endpoint", cfg.MinIO.Endpoint, "bucket", cfg.MinIO.Bucket, "use_ssl", cfg.MinIO.UseSSL)
 	}
 
 	srv, err := server.New(cfg, logger, deps)

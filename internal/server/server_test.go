@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -9,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/moonrill/go-backend-template/internal/config"
+	"github.com/moonrill/go-backend-template/internal/platform/redis"
+	"github.com/moonrill/go-backend-template/internal/platform/storage/minio"
 )
 
 func testConfig() config.Config {
@@ -118,4 +122,181 @@ func TestServerUntrustedProxyIgnoresForwardedFor(t *testing.T) {
 	if !strings.Contains(logs, "192.0.2.10") {
 		t.Fatalf("expected RemoteAddr IP 192.0.2.10 in logs, got: %s", logs)
 	}
+}
+
+func TestServerRedisReadiness(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+
+	t.Run("redis disabled does not affect readiness", func(t *testing.T) {
+		cfg := testConfig()
+		cfg.Redis.Enabled = false
+
+		srv, err := New(cfg, logger)
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/health/ready", nil)
+		rec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/v1/health/ready status = %d, want 200", rec.Code)
+		}
+	})
+
+	t.Run("redis enabled but unavailable fails ready, live still passes", func(t *testing.T) {
+		cfg := testConfig()
+		cfg.Redis.Enabled = true
+		cfg.Redis.DialTimeout = 500 * time.Millisecond
+
+		srv, err := New(cfg, logger, Dependencies{Redis: nil})
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+
+		// Liveness must NOT fail just because Redis is unavailable
+		liveReq := httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
+		liveRec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(liveRec, liveReq)
+		if liveRec.Code != http.StatusOK {
+			t.Fatalf("GET /api/v1/health/live status = %d, want 200", liveRec.Code)
+		}
+
+		// Readiness must reflect unavailable dependency
+		readyReq := httptest.NewRequest(http.MethodGet, "/api/v1/health/ready", nil)
+		readyRec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(readyRec, readyReq)
+		if readyRec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("GET /api/v1/health/ready status = %d, want 503", readyRec.Code)
+		}
+		if !strings.Contains(readyRec.Body.String(), `"redis":"unavailable"`) {
+			t.Fatalf("expected redis:unavailable in body, got: %s", readyRec.Body.String())
+		}
+	})
+
+	t.Run("redis enabled and healthy passes readiness", func(t *testing.T) {
+		mr := miniredis.RunT(t)
+		cfg := testConfig()
+		cfg.Redis.Enabled = true
+		cfg.Redis.URL = "redis://" + mr.Addr() + "/0"
+		cfg.Redis.DialTimeout = 1 * time.Second
+
+		client, err := redis.New(context.Background(), cfg.Redis)
+		if err != nil {
+			t.Fatalf("redis.New() error = %v", err)
+		}
+		defer client.Close()
+
+		srv, err := New(cfg, logger, Dependencies{Redis: client})
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/health/ready", nil)
+		rec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/v1/health/ready status = %d, want 200", rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), `"redis":"ready"`) {
+			t.Fatalf("expected redis:ready in body, got: %s", rec.Body.String())
+		}
+	})
+}
+
+func TestServerMinIOReadiness(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+
+	t.Run("minio disabled does not affect readiness", func(t *testing.T) {
+		cfg := testConfig()
+		cfg.MinIO.Enabled = false
+
+		srv, err := New(cfg, logger)
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/health/ready", nil)
+		rec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/v1/health/ready status = %d, want 200", rec.Code)
+		}
+	})
+
+	t.Run("minio enabled but unavailable fails ready, live still passes", func(t *testing.T) {
+		cfg := testConfig()
+		cfg.MinIO.Enabled = true
+		cfg.MinIO.ConnectTimeout = 500 * time.Millisecond
+
+		srv, err := New(cfg, logger, Dependencies{MinIO: nil})
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+
+		// Liveness must NOT fail just because MinIO is unavailable
+		liveReq := httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
+		liveRec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(liveRec, liveReq)
+		if liveRec.Code != http.StatusOK {
+			t.Fatalf("GET /api/v1/health/live status = %d, want 200", liveRec.Code)
+		}
+
+		// Readiness must reflect unavailable dependency
+		readyReq := httptest.NewRequest(http.MethodGet, "/api/v1/health/ready", nil)
+		readyRec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(readyRec, readyReq)
+		if readyRec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("GET /api/v1/health/ready status = %d, want 503", readyRec.Code)
+		}
+		if !strings.Contains(readyRec.Body.String(), `"minio":"unavailable"`) {
+			t.Fatalf("expected minio:unavailable in body, got: %s", readyRec.Body.String())
+		}
+	})
+
+	t.Run("minio enabled and healthy passes readiness", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodHead:
+				w.WriteHeader(http.StatusOK)
+			case http.MethodGet:
+				w.Header().Set("Content-Type", "application/xml")
+				_, _ = w.Write([]byte(`<LocationConstraint xmlns="http://s3.amazonaws.com/doc/2006-03-01/">us-east-1</LocationConstraint>`))
+			default:
+				w.WriteHeader(http.StatusOK)
+			}
+		}))
+		defer ts.Close()
+
+		endpoint := strings.TrimPrefix(ts.URL, "http://")
+		cfg := testConfig()
+		cfg.MinIO.Enabled = true
+		cfg.MinIO.Endpoint = endpoint
+		cfg.MinIO.Bucket = "ready-bucket"
+		cfg.MinIO.AccessKey = "key"
+		cfg.MinIO.SecretKey = "secret"
+		cfg.MinIO.UseSSL = false
+		cfg.MinIO.ConnectTimeout = 1 * time.Second
+
+		client, err := minio.New(context.Background(), cfg.MinIO)
+		if err != nil {
+			t.Fatalf("minio.New() error = %v", err)
+		}
+		defer client.Close()
+
+		srv, err := New(cfg, logger, Dependencies{MinIO: client})
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/health/ready", nil)
+		rec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /api/v1/health/ready status = %d, want 200", rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), `"minio":"ready"`) {
+			t.Fatalf("expected minio:ready in body, got: %s", rec.Body.String())
+		}
+	})
 }

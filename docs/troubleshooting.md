@@ -14,4 +14,4 @@ Confirm `METRICS_ENABLED=true` and that the server has restarted after configura
 
 ## Dependency integrations
 
-PostgreSQL, Redis, MinIO, tracing, and CRUD are not yet implemented in this initial scaffold. Do not enable their flags until the relevant phase is complete.
+PostgreSQL (with Users CRUD), Redis, and MinIO are implemented. OpenTelemetry tracing is reserved for Phase 6. Do not enable flags for uncompleted phases until those phases are implemented.

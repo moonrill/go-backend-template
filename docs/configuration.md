@@ -22,10 +22,25 @@ The application reads environment variables and automatically loads a local `.en
 | `DATABASE_MAX_CONN_LIFETIME` | `30m` | Maximum lifetime of a pooled connection |
 | `DATABASE_MAX_CONN_IDLE_TIME` | `5m` | Maximum idle time of a pooled connection |
 | `DATABASE_HEALTH_CHECK_PERIOD` | `1m` | Background pool health check interval |
+| `REDIS_ENABLED` | `false` | Enables Redis client and readiness check (`true` or `false`) |
+| `REDIS_URL` | *(empty)* | Redis connection URI (`redis://...` or `rediss://...`; e.g., `redis://127.0.0.1:6379/0` on host, `redis://redis:6379/0` in Docker Compose, `redis://redis-service.default.svc.cluster.local:6379/0` in Kubernetes); required when `REDIS_ENABLED=true` |
+| `REDIS_PASSWORD` | *(empty)* | Optional password override (overrides password embedded in `REDIS_URL` if non-empty) |
+| `REDIS_DB` | `0` | Redis logical database index (`>= 0`) |
+| `REDIS_POOL_SIZE` | `10` | Maximum socket connections in client pool (`>= 1`) |
+| `REDIS_DIAL_TIMEOUT` | `5s` | Connection dial timeout (positive duration; falls back to legacy `REDIS_CONNECT_TIMEOUT` if set) |
+| `REDIS_READ_TIMEOUT` | `3s` | Socket read deadline (positive duration) |
+| `REDIS_WRITE_TIMEOUT` | `3s` | Socket write deadline (positive duration) |
+| `MINIO_ENABLED` | `false` | Enables MinIO/S3 object storage client and readiness check (`true` or `false`) |
+| `MINIO_ENDPOINT` | *(empty)* | MinIO/S3 endpoint without scheme (e.g. `127.0.0.1:9000`, `minio:9000`); required when `MINIO_ENABLED=true` |
+| `MINIO_REGION` | `us-east-1` | S3 region identifier |
+| `MINIO_BUCKET` | *(empty)* | Target bucket name (3-63 chars, lowercase); required when `MINIO_ENABLED=true` |
+| `MINIO_ACCESS_KEY` | *(empty)* | MinIO/S3 access key; required when `MINIO_ENABLED=true` |
+| `MINIO_SECRET_KEY` | *(empty)* | MinIO/S3 secret key; required when `MINIO_ENABLED=true` |
+| `MINIO_USE_SSL` | `true` | Enables TLS (`true` for HTTPS/production, `false` for local dev) |
+| `MINIO_CONNECT_TIMEOUT` | `5s` | Connection and bucket health check timeout (positive duration) |
+| `MINIO_AUTO_CREATE_BUCKET` | `true` | Automatically creates bucket on startup if it does not exist |
 | `TRACING_ENABLED` | `false` | Reserved for tracing integration phase |
-| `REDIS_ENABLED` | `false` | Reserved for Redis integration phase |
-| `MINIO_ENABLED` | `false` | Reserved for MinIO / object storage integration phase |
 
-Invalid values for booleans, integers, durations, ports, environment names, log levels, database URLs, or trusted proxy entries return an explicit startup error rather than silently falling back to defaults. Enabling `REDIS_ENABLED`, `MINIO_ENABLED`, or `TRACING_ENABLED` before their implementation phase also returns a startup error.
+Invalid values for booleans, integers, durations, ports, environment names, log levels, database URLs, Redis URLs, MinIO endpoints/buckets, or trusted proxy entries return an explicit startup error rather than silently falling back to defaults. Enabling `TRACING_ENABLED` before its implementation phase also returns a startup error.
 
 Never commit real credentials. Prefer a secret manager or deployment platform secrets for production.

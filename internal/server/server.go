@@ -13,11 +13,15 @@ import (
 	"github.com/moonrill/go-backend-template/internal/modules/users"
 	"github.com/moonrill/go-backend-template/internal/platform/observability"
 	"github.com/moonrill/go-backend-template/internal/platform/postgres"
+	"github.com/moonrill/go-backend-template/internal/platform/redis"
+	"github.com/moonrill/go-backend-template/internal/platform/storage/minio"
 )
 
 // Dependencies holds optional external resources wired into the HTTP server.
 type Dependencies struct {
-	DB *pgxpool.Pool
+	DB    *pgxpool.Pool
+	Redis *redis.Client
+	MinIO *minio.Client
 }
 
 func New(cfg config.Config, logger *slog.Logger, deps ...Dependencies) (*http.Server, error) {
@@ -61,6 +65,18 @@ func New(cfg config.Config, logger *slog.Logger, deps ...Dependencies) (*http.Se
 		readinessChecks = append(readinessChecks, observability.ReadinessCheck{
 			Name:  "postgres",
 			Check: postgres.HealthCheck(dep.DB, cfg.Database.ConnectTimeout),
+		})
+	}
+	if cfg.Redis.Enabled {
+		readinessChecks = append(readinessChecks, observability.ReadinessCheck{
+			Name:  "redis",
+			Check: redis.HealthCheck(dep.Redis, cfg.Redis.DialTimeout),
+		})
+	}
+	if cfg.MinIO.Enabled {
+		readinessChecks = append(readinessChecks, observability.ReadinessCheck{
+			Name:  "minio",
+			Check: minio.HealthCheck(dep.MinIO, cfg.MinIO.ConnectTimeout),
 		})
 	}
 

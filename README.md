@@ -25,15 +25,15 @@ A lightweight, modular REST API starter built with Go and Gin.
 
 The scaffold currently exposes:
 - `GET /api/v1/health/live`
-- `GET /api/v1/health/ready` (includes PostgreSQL readiness when `DATABASE_ENABLED=true`)
+- `GET /api/v1/health/ready` (evaluates PostgreSQL, Redis, and MinIO readiness when their respective flags are enabled)
 - `GET /api/v1/users`, `GET /api/v1/users/:id`, `POST /api/v1/users`, `PATCH /api/v1/users/:id`, `DELETE /api/v1/users/:id` (when `DATABASE_ENABLED=true`; see [`docs/openapi.yaml`](docs/openapi.yaml))
 - `GET /metrics` when metrics are enabled
 
-Optional Redis, MinIO, and tracing integrations are added in subsequent implementation phases. Until then, do not enable a dependency that has not yet been implemented.
+An optional OpenTelemetry tracing integration is added in Phase 6. Until then, do not enable a dependency that has not yet been implemented.
 
 ## Configuration
 
-See [Configuration](docs/configuration.md) and [Database](docs/database.md).
+See [Configuration](docs/configuration.md), [Database](docs/database.md), [Redis](docs/redis.md), and [MinIO](docs/minio.md).
 
 ## Architecture
 
