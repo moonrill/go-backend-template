@@ -15,6 +15,7 @@ import (
 	"github.com/moonrill/go-backend-template/internal/platform/postgres"
 	"github.com/moonrill/go-backend-template/internal/platform/redis"
 	"github.com/moonrill/go-backend-template/internal/platform/storage/minio"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 // Dependencies holds optional external resources wired into the HTTP server.
@@ -53,12 +54,28 @@ func New(cfg config.Config, logger *slog.Logger, deps ...Dependencies) (*http.Se
 		return nil, fmt.Errorf("configure trusted proxies: %w", err)
 	}
 
+	if cfg.TracingEnabled {
+		serviceName := cfg.Tracing.ServiceName
+		if serviceName == "" {
+			serviceName = cfg.Name
+		}
+		router.Use(otelgin.Middleware(serviceName))
+	}
+
 	router.Use(
 		middleware.RequestID(),
 		middleware.SecurityHeaders(),
 		middleware.AccessLog(logger),
 		middleware.Recovery(logger),
 	)
+
+	if cfg.MetricsEnabled {
+		promMiddleware, err := middleware.NewPrometheusMiddleware(nil)
+		if err != nil {
+			return nil, fmt.Errorf("configure prometheus middleware: %w", err)
+		}
+		router.Use(promMiddleware.Handler())
+	}
 
 	var readinessChecks []observability.ReadinessCheck
 	if cfg.Database.Enabled {

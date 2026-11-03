@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func init() {
@@ -128,5 +130,45 @@ func TestRecoveryAndAccessLogOrder(t *testing.T) {
 	}
 	if !strings.Contains(logs, `"msg":"http request"`) || !strings.Contains(logs, `"status":500`) {
 		t.Errorf("expected access log entry with status 500, got: %s", logs)
+	}
+}
+
+func TestAccessLogTraceCorrelation(t *testing.T) {
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
+
+	router := gin.New()
+	router.Use(RequestID(), AccessLog(logger))
+	router.GET("/traced", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSampler(sdktrace.AlwaysSample()))
+	tracer := tp.Tracer("test-tracer")
+	ctx, span := tracer.Start(context.Background(), "test-span")
+	defer span.End()
+
+	req := httptest.NewRequest(http.MethodGet, "/traced", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	spanCtx := span.SpanContext()
+	wantTraceID := spanCtx.TraceID().String()
+	wantSpanID := spanCtx.SpanID().String()
+
+	if rec.Header().Get("X-Trace-ID") != wantTraceID {
+		t.Errorf("header X-Trace-ID = %q, want %q", rec.Header().Get("X-Trace-ID"), wantTraceID)
+	}
+
+	logs := logBuf.String()
+	if !strings.Contains(logs, wantTraceID) {
+		t.Errorf("expected access log to contain trace_id %q, got: %s", wantTraceID, logs)
+	}
+	if !strings.Contains(logs, wantSpanID) {
+		t.Errorf("expected access log to contain span_id %q, got: %s", wantSpanID, logs)
 	}
 }

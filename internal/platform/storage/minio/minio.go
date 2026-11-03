@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
 	miniosdk "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/moonrill/go-backend-template/internal/config"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Client wraps the MinIO SDK client with connection lifecycle, health check, and storage helpers.
@@ -26,9 +28,10 @@ func New(ctx context.Context, cfg config.MinIOConfig) (*Client, error) {
 
 	creds := credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, "")
 	client, err := miniosdk.New(cfg.Endpoint, &miniosdk.Options{
-		Creds:  creds,
-		Secure: cfg.UseSSL,
-		Region: cfg.Region,
+		Creds:     creds,
+		Secure:    cfg.UseSSL,
+		Region:    cfg.Region,
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("minio client creation failed: %w", sanitizeError(err))

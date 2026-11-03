@@ -8,8 +8,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/moonrill/go-backend-template/internal/config"
+	"github.com/moonrill/go-backend-template/internal/otel"
 	"github.com/moonrill/go-backend-template/internal/platform/postgres"
 	"github.com/moonrill/go-backend-template/internal/platform/redis"
 	"github.com/moonrill/go-backend-template/internal/platform/storage/minio"
@@ -31,6 +33,19 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	otelShutdown, err := otel.Init(ctx, time.Local)
+	if err != nil {
+		logger.Error("tracing initialization failed", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := otelShutdown(shutdownCtx); err != nil {
+			logger.Warn("tracing shutdown failed", "error", err)
+		}
+	}()
 
 	var deps server.Dependencies
 	if cfg.Database.Enabled {

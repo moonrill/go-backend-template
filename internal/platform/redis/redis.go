@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/moonrill/go-backend-template/internal/config"
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	goredis "github.com/redis/go-redis/v9"
 )
 
@@ -47,6 +48,7 @@ func New(ctx context.Context, cfg config.RedisConfig) (*Client, error) {
 	}
 
 	rdb := goredis.NewClient(opt)
+	_ = redisotel.InstrumentTracing(rdb)
 
 	dialTimeout := cfg.DialTimeout
 	if dialTimeout <= 0 {

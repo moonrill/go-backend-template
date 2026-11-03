@@ -46,6 +46,13 @@ func clearEnv(t *testing.T) {
 	t.Setenv("MINIO_CONNECT_TIMEOUT", "")
 	t.Setenv("MINIO_AUTO_CREATE_BUCKET", "")
 	t.Setenv("APP_TRUSTED_PROXIES", "")
+	t.Setenv("OTEL_SDK_DISABLED", "")
+	t.Setenv("OTEL_SERVICE_NAME", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
+	t.Setenv("OTEL_TRACES_SAMPLER", "")
+	t.Setenv("OTEL_TRACES_SAMPLER_ARG", "")
 }
 
 func TestLoadDefaults(t *testing.T) {
@@ -69,6 +76,12 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if !cfg.MetricsEnabled {
 		t.Fatalf("MetricsEnabled = false, want true")
+	}
+	if cfg.TracingEnabled {
+		t.Fatalf("TracingEnabled = true, want false")
+	}
+	if cfg.Tracing.Enabled {
+		t.Fatalf("Tracing.Enabled = true, want false")
 	}
 	if cfg.Database.Enabled {
 		t.Fatalf("Database.Enabled = true, want false")
@@ -497,16 +510,114 @@ func TestLoadMinIOConfigValidation(t *testing.T) {
 	})
 }
 
-func TestLoadRejectsUnimplementedModules(t *testing.T) {
-	for _, flag := range []string{"TRACING_ENABLED"} {
-		t.Run(flag, func(t *testing.T) {
-			clearEnv(t)
-			t.Setenv(flag, "true")
-			if _, err := Load(); err == nil {
-				t.Fatalf("expected error when %s=true", flag)
-			}
-		})
-	}
+func TestLoadTracingConfigValidation(t *testing.T) {
+	t.Run("disabled by default", func(t *testing.T) {
+		clearEnv(t)
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.Tracing.Enabled || cfg.TracingEnabled {
+			t.Fatal("expected tracing to be disabled by default")
+		}
+		if os.Getenv("OTEL_SDK_DISABLED") != "true" {
+			t.Fatalf("expected OTEL_SDK_DISABLED=true, got %q", os.Getenv("OTEL_SDK_DISABLED"))
+		}
+	})
+
+	t.Run("enabled via TRACING_ENABLED=true", func(t *testing.T) {
+		clearEnv(t)
+		t.Setenv("TRACING_ENABLED", "true")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !cfg.Tracing.Enabled || !cfg.TracingEnabled {
+			t.Fatal("expected tracing to be enabled")
+		}
+		if cfg.Tracing.ExporterProtocol != "grpc" {
+			t.Fatalf("expected default grpc protocol, got %q", cfg.Tracing.ExporterProtocol)
+		}
+		if os.Getenv("OTEL_SDK_DISABLED") != "false" {
+			t.Fatalf("expected OTEL_SDK_DISABLED=false, got %q", os.Getenv("OTEL_SDK_DISABLED"))
+		}
+	})
+
+	t.Run("enabled via OTEL_SDK_DISABLED=false", func(t *testing.T) {
+		clearEnv(t)
+		t.Setenv("OTEL_SDK_DISABLED", "false")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !cfg.Tracing.Enabled || !cfg.TracingEnabled {
+			t.Fatal("expected tracing to be enabled")
+		}
+	})
+
+	t.Run("explicitly disabled via OTEL_SDK_DISABLED=true", func(t *testing.T) {
+		clearEnv(t)
+		t.Setenv("OTEL_SDK_DISABLED", "true")
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.Tracing.Enabled || cfg.TracingEnabled {
+			t.Fatal("expected tracing to be disabled")
+		}
+	})
+
+	t.Run("enabled with custom http/protobuf protocol and sampler", func(t *testing.T) {
+		clearEnv(t)
+		t.Setenv("TRACING_ENABLED", "true")
+		t.Setenv("OTEL_SERVICE_NAME", "custom-service")
+		t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+		t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://alloy:4318")
+		t.Setenv("OTEL_TRACES_SAMPLER", "traceidratio")
+		t.Setenv("OTEL_TRACES_SAMPLER_ARG", "0.5")
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.Tracing.ServiceName != "custom-service" {
+			t.Fatalf("ServiceName = %q, want custom-service", cfg.Tracing.ServiceName)
+		}
+		if cfg.Tracing.ExporterProtocol != "http/protobuf" {
+			t.Fatalf("ExporterProtocol = %q, want http/protobuf", cfg.Tracing.ExporterProtocol)
+		}
+		if cfg.Tracing.Sampler != "traceidratio" || cfg.Tracing.SamplerArg != "0.5" {
+			t.Fatalf("Sampler = %s/%s, want traceidratio/0.5", cfg.Tracing.Sampler, cfg.Tracing.SamplerArg)
+		}
+	})
+
+	t.Run("invalid protocol fails", func(t *testing.T) {
+		clearEnv(t)
+		t.Setenv("TRACING_ENABLED", "true")
+		t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "unsupported-protocol")
+		if _, err := Load(); err == nil {
+			t.Fatal("expected error on unsupported protocol")
+		}
+	})
+
+	t.Run("invalid sampler fails", func(t *testing.T) {
+		clearEnv(t)
+		t.Setenv("TRACING_ENABLED", "true")
+		t.Setenv("OTEL_TRACES_SAMPLER", "unsupported-sampler")
+		if _, err := Load(); err == nil {
+			t.Fatal("expected error on unsupported sampler")
+		}
+	})
+
+	t.Run("invalid sampler arg ratio fails", func(t *testing.T) {
+		clearEnv(t)
+		t.Setenv("TRACING_ENABLED", "true")
+		t.Setenv("OTEL_TRACES_SAMPLER", "traceidratio")
+		t.Setenv("OTEL_TRACES_SAMPLER_ARG", "1.5")
+		if _, err := Load(); err == nil {
+			t.Fatal("expected error when sampler ratio > 1.0")
+		}
+	})
 }
 
 func TestLoadDotEnvFile(t *testing.T) {

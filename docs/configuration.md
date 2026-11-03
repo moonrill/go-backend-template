@@ -39,8 +39,16 @@ The application reads environment variables and automatically loads a local `.en
 | `MINIO_USE_SSL` | `true` | Enables TLS (`true` for HTTPS/production, `false` for local dev) |
 | `MINIO_CONNECT_TIMEOUT` | `5s` | Connection and bucket health check timeout (positive duration) |
 | `MINIO_AUTO_CREATE_BUCKET` | `true` | Automatically creates bucket on startup if it does not exist |
-| `TRACING_ENABLED` | `false` | Reserved for tracing integration phase |
+| `TRACING_ENABLED` | `false` | Enables OpenTelemetry distributed tracing (`true` or `false`) |
+| `OTEL_SDK_DISABLED` | `true` | OpenTelemetry standard toggle (`true` disables SDK) |
+| `OTEL_SERVICE_NAME` | `go-backend-template` | Service name attached to resource attributes |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | OTLP exporter protocol (`grpc` or `http/protobuf`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | *(empty)* | OTLP collector endpoint (e.g. `http://alloy:4318` or `alloy:4317`) |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | *(empty)* | OTLP traces collector endpoint override |
+| `OTEL_TRACES_SAMPLER` | `parentbased_traceidratio` | Sampler type (`always_on`, `always_off`, `traceidratio`, `parentbased_always_on`, `parentbased_always_off`, `parentbased_traceidratio`) |
+| `OTEL_TRACES_SAMPLER_ARG` | `1.0` | Sampler ratio argument between `0.0` and `1.0` |
+| `OTEL_RESOURCE_ATTRIBUTES` | *(empty)* | Custom resource attributes (comma-separated `key=value`) |
 
-Invalid values for booleans, integers, durations, ports, environment names, log levels, database URLs, Redis URLs, MinIO endpoints/buckets, or trusted proxy entries return an explicit startup error rather than silently falling back to defaults. Enabling `TRACING_ENABLED` before its implementation phase also returns a startup error.
+Invalid values for booleans, integers, durations, ports, environment names, log levels, database URLs, Redis URLs, MinIO endpoints/buckets, tracing protocols/samplers, or trusted proxy entries return an explicit startup error rather than silently falling back to defaults.
 
 Never commit real credentials. Prefer a secret manager or deployment platform secrets for production.

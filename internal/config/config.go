@@ -24,6 +24,7 @@ type Config struct {
 	LogLevel        string
 	MetricsEnabled  bool
 	TracingEnabled  bool
+	Tracing         TracingConfig
 	Database        DatabaseConfig
 	Redis           RedisConfig
 	RedisEnabled    bool
@@ -64,6 +65,16 @@ type MinIOConfig struct {
 	UseSSL         bool
 	ConnectTimeout time.Duration
 	AutoCreate     bool
+}
+
+type TracingConfig struct {
+	Enabled          bool
+	ServiceName      string
+	ExporterProtocol string
+	ExporterEndpoint string
+	TracesEndpoint   string
+	Sampler          string
+	SamplerArg       string
 }
 
 func Load() (Config, error) {
@@ -128,8 +139,35 @@ func Load() (Config, error) {
 	if cfg.MetricsEnabled, err = getBool("METRICS_ENABLED", true); err != nil {
 		return Config{}, err
 	}
-	if cfg.TracingEnabled, err = getBool("TRACING_ENABLED", false); err != nil {
-		return Config{}, err
+	var tracingEnabled bool
+	if v := os.Getenv("TRACING_ENABLED"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("TRACING_ENABLED must be a boolean: %w", err)
+		}
+		tracingEnabled = b
+	} else if v := os.Getenv("OTEL_SDK_DISABLED"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Config{}, fmt.Errorf("OTEL_SDK_DISABLED must be a boolean: %w", err)
+		}
+		tracingEnabled = !b
+	}
+
+	cfg.Tracing = TracingConfig{
+		Enabled:          tracingEnabled,
+		ServiceName:      getEnv("OTEL_SERVICE_NAME", cfg.Name),
+		ExporterProtocol: getEnv("OTEL_EXPORTER_OTLP_PROTOCOL", "grpc"),
+		ExporterEndpoint: getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		TracesEndpoint:   getEnv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""),
+		Sampler:          getEnv("OTEL_TRACES_SAMPLER", "parentbased_traceidratio"),
+		SamplerArg:       getEnv("OTEL_TRACES_SAMPLER_ARG", "1.0"),
+	}
+	cfg.TracingEnabled = cfg.Tracing.Enabled
+	if cfg.Tracing.Enabled {
+		_ = os.Setenv("OTEL_SDK_DISABLED", "false")
+	} else {
+		_ = os.Setenv("OTEL_SDK_DISABLED", "true")
 	}
 	if cfg.Database.Enabled, err = getBool("DATABASE_ENABLED", false); err != nil {
 		return Config{}, err
@@ -225,8 +263,8 @@ func Load() (Config, error) {
 	if err := validateMinIOConfig(cfg.MinIO); err != nil {
 		return Config{}, err
 	}
-	if cfg.TracingEnabled {
-		return Config{}, fmt.Errorf("TRACING_ENABLED is not yet supported in this phase")
+	if err := validateTracingConfig(cfg.Tracing); err != nil {
+		return Config{}, err
 	}
 
 	return cfg, nil
@@ -332,6 +370,29 @@ func validateBucketName(bucket string) error {
 	}
 	if bucket[0] == '-' || bucket[0] == '.' || bucket[len(bucket)-1] == '-' || bucket[len(bucket)-1] == '.' {
 		return fmt.Errorf("name must start and end with a letter or number")
+	}
+	return nil
+}
+
+func validateTracingConfig(t TracingConfig) error {
+	if !t.Enabled {
+		return nil
+	}
+	switch t.ExporterProtocol {
+	case "grpc", "http/protobuf":
+	default:
+		return fmt.Errorf("OTEL_EXPORTER_OTLP_PROTOCOL must be grpc or http/protobuf")
+	}
+	switch t.Sampler {
+	case "always_on", "always_off", "traceidratio", "parentbased_always_on", "parentbased_always_off", "parentbased_traceidratio":
+	default:
+		return fmt.Errorf("OTEL_TRACES_SAMPLER must be always_on, always_off, traceidratio, parentbased_always_on, parentbased_always_off, or parentbased_traceidratio")
+	}
+	if t.Sampler == "traceidratio" || t.Sampler == "parentbased_traceidratio" {
+		val, err := strconv.ParseFloat(t.SamplerArg, 64)
+		if err != nil || val < 0.0 || val > 1.0 {
+			return fmt.Errorf("OTEL_TRACES_SAMPLER_ARG must be a float between 0.0 and 1.0")
+		}
 	}
 	return nil
 }

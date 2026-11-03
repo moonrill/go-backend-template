@@ -300,3 +300,24 @@ func TestServerMinIOReadiness(t *testing.T) {
 		}
 	})
 }
+
+func TestServerTracingEnabled(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	cfg := testConfig()
+	cfg.TracingEnabled = true
+	cfg.Tracing.Enabled = true
+	cfg.Tracing.ServiceName = "test-tracing-api"
+
+	srv, err := New(cfg, logger)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/health/live", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
