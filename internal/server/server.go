@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/moonrill/go-backend-template/docs"
 	"github.com/moonrill/go-backend-template/internal/config"
 	"github.com/moonrill/go-backend-template/internal/middleware"
 	"github.com/moonrill/go-backend-template/internal/modules/users"
@@ -15,6 +17,8 @@ import (
 	"github.com/moonrill/go-backend-template/internal/platform/postgres"
 	"github.com/moonrill/go-backend-template/internal/platform/redis"
 	"github.com/moonrill/go-backend-template/internal/platform/storage/minio"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
@@ -117,6 +121,26 @@ func New(cfg config.Config, logger *slog.Logger, deps ...Dependencies) (*http.Se
 		}
 		router.GET("/metrics", gin.WrapH(metricsHandler))
 	}
+
+	router.GET("/swagger", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
+	})
+	router.GET("/swagger/*any", func(c *gin.Context) {
+		scheme := "http"
+		if c.Request.TLS != nil {
+			scheme = "https"
+		}
+		if proto := c.GetHeader("X-Forwarded-Proto"); proto != "" {
+			scheme = strings.Split(proto, ",")[0]
+		}
+
+		if host := c.Request.Host; host != "" {
+			docs.SwaggerInfo.Host = host
+		}
+		docs.SwaggerInfo.Schemes = []string{scheme}
+
+		ginSwagger.WrapHandler(swaggerFiles.Handler)(c)
+	})
 
 	return &http.Server{
 		Addr:              ":" + cfg.Port,

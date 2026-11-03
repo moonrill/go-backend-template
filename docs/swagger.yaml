@@ -1,0 +1,393 @@
+basePath: /api/v1
+definitions:
+  httpx.ErrorInfo:
+    properties:
+      code:
+        example: VALIDATION_ERROR
+        type: string
+      details:
+        items:
+          $ref: '#/definitions/httpx.FieldError'
+        type: array
+      message:
+        example: Request validation failed
+        type: string
+      request_id:
+        example: req_12345678-abcd
+        type: string
+    type: object
+  httpx.ErrorResponse:
+    properties:
+      error:
+        $ref: '#/definitions/httpx.ErrorInfo'
+      success:
+        example: false
+        type: boolean
+    type: object
+  httpx.FieldError:
+    properties:
+      field:
+        example: email
+        type: string
+      message:
+        example: email is required
+        type: string
+    type: object
+  httpx.HealthData:
+    properties:
+      checks:
+        additionalProperties:
+          type: string
+        type: object
+      status:
+        example: live
+        type: string
+    type: object
+  httpx.HealthResponse:
+    properties:
+      data:
+        $ref: '#/definitions/httpx.HealthData'
+      success:
+        example: true
+        type: boolean
+    type: object
+  httpx.PageMeta:
+    properties:
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total_items:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  users.CreateUserRequest:
+    properties:
+      email:
+        type: string
+      full_name:
+        type: string
+      is_active:
+        type: boolean
+      role:
+        type: string
+    type: object
+  users.UpdateUserRequest:
+    properties:
+      email:
+        type: string
+      full_name:
+        type: string
+      is_active:
+        type: boolean
+      role:
+        type: string
+    type: object
+  users.UserListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/users.UserResponse'
+        type: array
+      meta:
+        $ref: '#/definitions/httpx.PageMeta'
+      success:
+        example: true
+        type: boolean
+    type: object
+  users.UserResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        example: user@example.com
+        type: string
+      full_name:
+        example: Jane Doe
+        type: string
+      id:
+        example: a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d
+        type: string
+      is_active:
+        example: true
+        type: boolean
+      role:
+        example: member
+        type: string
+      updated_at:
+        type: string
+    type: object
+  users.UserSuccessResponse:
+    properties:
+      data:
+        $ref: '#/definitions/users.UserResponse'
+      success:
+        example: true
+        type: boolean
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: API Support
+    url: https://github.com/moonrill/go-backend-template
+  description: Lightweight, modular Go REST API starter built with Gin, PostgreSQL,
+    Redis, MinIO, and OpenTelemetry.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: Go Backend Template API
+  version: "1.0"
+paths:
+  /health/live:
+    get:
+      description: Checks whether the application process is running and responding
+        to requests.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Process is live
+          schema:
+            $ref: '#/definitions/httpx.HealthResponse'
+      summary: Liveness probe
+      tags:
+      - Health
+  /health/ready:
+    get:
+      description: Evaluates readiness of required infrastructure dependencies (PostgreSQL,
+        Redis, MinIO).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: All required dependencies are ready
+          schema:
+            $ref: '#/definitions/httpx.HealthResponse'
+        "503":
+          description: One or more required dependencies are unavailable
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Readiness probe
+      tags:
+      - Health
+  /users:
+    get:
+      description: Retrieves a paginated list of users with optional filtering, searching,
+        and sorting.
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 20
+        description: Page size
+        in: query
+        maximum: 100
+        minimum: 1
+        name: page_size
+        type: integer
+      - description: Filter by user role
+        enum:
+        - admin
+        - member
+        - viewer
+        in: query
+        name: role
+        type: string
+      - description: Filter by active status
+        in: query
+        name: is_active
+        type: boolean
+      - description: Search query matching full name or email (max 100 characters)
+        in: query
+        name: search
+        type: string
+      - default: created_at
+        description: Field to sort by
+        enum:
+        - created_at
+        - full_name
+        - email
+        in: query
+        name: sort_by
+        type: string
+      - default: desc
+        description: Sort order direction
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sort_order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Paginated list of users
+          schema:
+            $ref: '#/definitions/users.UserListResponse'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: List users
+      tags:
+      - Users
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user record.
+      parameters:
+      - description: User creation payload
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/users.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User created successfully
+          schema:
+            $ref: '#/definitions/users.UserSuccessResponse'
+        "400":
+          description: Validation failure or invalid JSON
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "409":
+          description: Email address already exists
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "413":
+          description: Request body exceeds maximum allowed size
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Create a user
+      tags:
+      - Users
+  /users/{id}:
+    delete:
+      description: Deletes a user record by UUID.
+      parameters:
+      - description: User UUID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: User deleted successfully
+        "400":
+          description: Invalid UUID format
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Delete a user
+      tags:
+      - Users
+    get:
+      description: Fetches a single user record by its canonical UUID.
+      parameters:
+      - description: User UUID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User details
+          schema:
+            $ref: '#/definitions/users.UserSuccessResponse'
+        "400":
+          description: Invalid UUID format
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Get user by ID
+      tags:
+      - Users
+    patch:
+      consumes:
+      - application/json
+      description: Partially updates an existing user record. At least one field must
+        be provided.
+      parameters:
+      - description: User UUID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/users.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User updated successfully
+          schema:
+            $ref: '#/definitions/users.UserSuccessResponse'
+        "400":
+          description: Validation failure or invalid JSON
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "409":
+          description: Email address already exists
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "413":
+          description: Request body exceeds maximum allowed size
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/httpx.ErrorResponse'
+      summary: Update a user
+      tags:
+      - Users
+schemes:
+- http
+- https
+swagger: "2.0"

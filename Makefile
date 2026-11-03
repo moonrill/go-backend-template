@@ -1,4 +1,4 @@
-.PHONY: run fmt test vet build check sqlc migrate-up migrate-down
+.PHONY: run fmt test vet build check sqlc migrate-up migrate-down swagger
 
 SQLC_IMAGE ?= sqlc/sqlc:1.28.0
 
@@ -16,6 +16,9 @@ vet:
 
 build:
 	go build ./...
+
+swagger:
+	swag init -g cmd/api/main.go -o docs
 
 sqlc:
 	@if command -v sqlc >/dev/null 2>&1; then \

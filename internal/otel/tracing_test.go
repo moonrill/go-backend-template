@@ -83,4 +83,3 @@ func TestLogStartupAndErrorNilLoc(t *testing.T) {
 	logStartup(time.UTC, true, "grpc", "localhost:4317", "parentbased_traceidratio", "1.0")
 	logError(time.UTC, os.ErrNotExist)
 }
-

@@ -112,4 +112,3 @@ func (m *PrometheusMiddleware) Handler() gin.HandlerFunc {
 		).Observe(duration)
 	}
 }
-

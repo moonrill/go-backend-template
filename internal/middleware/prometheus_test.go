@@ -58,4 +58,3 @@ func TestPrometheusMiddleware(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w3.Code)
 	}
 }
-

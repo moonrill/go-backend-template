@@ -34,6 +34,22 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	usersGroup.DELETE("/:id", h.Delete)
 }
 
+// List godoc
+// @Summary List users
+// @Description Retrieves a paginated list of users with optional filtering, searching, and sorting.
+// @Tags Users
+// @Produce json
+// @Param page query int false "Page number" default(1) minimum(1)
+// @Param page_size query int false "Page size" default(20) minimum(1) maximum(100)
+// @Param role query string false "Filter by user role" Enums(admin, member, viewer)
+// @Param is_active query bool false "Filter by active status"
+// @Param search query string false "Search query matching full name or email (max 100 characters)"
+// @Param sort_by query string false "Field to sort by" Enums(created_at, full_name, email) default(created_at)
+// @Param sort_order query string false "Sort order direction" Enums(asc, desc) default(desc)
+// @Success 200 {object} UserListResponse "Paginated list of users"
+// @Failure 400 {object} httpx.ErrorResponse "Invalid query parameters"
+// @Failure 500 {object} httpx.ErrorResponse "Internal server error"
+// @Router /users [get]
 func (h *Handler) List(c *gin.Context) {
 	filter, err := ParseListUsersFilter(
 		c.Query("page"),
@@ -57,6 +73,17 @@ func (h *Handler) List(c *gin.Context) {
 	httpx.JSONPaginated(c, http.StatusOK, items, meta)
 }
 
+// GetByID godoc
+// @Summary Get user by ID
+// @Description Fetches a single user record by its canonical UUID.
+// @Tags Users
+// @Produce json
+// @Param id path string true "User UUID" format(uuid)
+// @Success 200 {object} UserSuccessResponse "User details"
+// @Failure 400 {object} httpx.ErrorResponse "Invalid UUID format"
+// @Failure 404 {object} httpx.ErrorResponse "User not found"
+// @Failure 500 {object} httpx.ErrorResponse "Internal server error"
+// @Router /users/{id} [get]
 func (h *Handler) GetByID(c *gin.Context) {
 	user, err := h.service.GetByID(c.Request.Context(), c.Param("id"))
 	if err != nil {
@@ -66,6 +93,19 @@ func (h *Handler) GetByID(c *gin.Context) {
 	httpx.JSONSuccess(c, http.StatusOK, user)
 }
 
+// Create godoc
+// @Summary Create a user
+// @Description Creates a new user record.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Param user body CreateUserRequest true "User creation payload"
+// @Success 201 {object} UserSuccessResponse "User created successfully"
+// @Failure 400 {object} httpx.ErrorResponse "Validation failure or invalid JSON"
+// @Failure 409 {object} httpx.ErrorResponse "Email address already exists"
+// @Failure 413 {object} httpx.ErrorResponse "Request body exceeds maximum allowed size"
+// @Failure 500 {object} httpx.ErrorResponse "Internal server error"
+// @Router /users [post]
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateUserRequest
 	if err := decodeStrictJSON(c, &req); err != nil {
@@ -80,6 +120,21 @@ func (h *Handler) Create(c *gin.Context) {
 	httpx.JSONSuccess(c, http.StatusCreated, user)
 }
 
+// Update godoc
+// @Summary Update a user
+// @Description Partially updates an existing user record. At least one field must be provided.
+// @Tags Users
+// @Accept json
+// @Produce json
+// @Param id path string true "User UUID" format(uuid)
+// @Param user body UpdateUserRequest true "Fields to update"
+// @Success 200 {object} UserSuccessResponse "User updated successfully"
+// @Failure 400 {object} httpx.ErrorResponse "Validation failure or invalid JSON"
+// @Failure 404 {object} httpx.ErrorResponse "User not found"
+// @Failure 409 {object} httpx.ErrorResponse "Email address already exists"
+// @Failure 413 {object} httpx.ErrorResponse "Request body exceeds maximum allowed size"
+// @Failure 500 {object} httpx.ErrorResponse "Internal server error"
+// @Router /users/{id} [patch]
 func (h *Handler) Update(c *gin.Context) {
 	var req UpdateUserRequest
 	if err := decodeStrictJSON(c, &req); err != nil {
@@ -94,6 +149,17 @@ func (h *Handler) Update(c *gin.Context) {
 	httpx.JSONSuccess(c, http.StatusOK, user)
 }
 
+// Delete godoc
+// @Summary Delete a user
+// @Description Deletes a user record by UUID.
+// @Tags Users
+// @Produce json
+// @Param id path string true "User UUID" format(uuid)
+// @Success 204 "User deleted successfully"
+// @Failure 400 {object} httpx.ErrorResponse "Invalid UUID format"
+// @Failure 404 {object} httpx.ErrorResponse "User not found"
+// @Failure 500 {object} httpx.ErrorResponse "Internal server error"
+// @Router /users/{id} [delete]
 func (h *Handler) Delete(c *gin.Context) {
 	if err := h.service.Delete(c.Request.Context(), c.Param("id")); err != nil {
 		h.writeError(c, err)

@@ -321,3 +321,46 @@ func TestServerTracingEnabled(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 }
+
+func TestServerSwaggerEndpoints(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	cfg := testConfig()
+
+	srv, err := New(cfg, logger)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	// 1. /swagger redirect
+	req1 := httptest.NewRequest(http.MethodGet, "/swagger", nil)
+	rec1 := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec1, req1)
+	if rec1.Code != http.StatusMovedPermanently {
+		t.Fatalf("GET /swagger status = %d, want 301", rec1.Code)
+	}
+	if loc := rec1.Header().Get("Location"); loc != "/swagger/index.html" {
+		t.Fatalf("GET /swagger redirect location = %q, want /swagger/index.html", loc)
+	}
+
+	// 2. /swagger/index.html
+	req2 := httptest.NewRequest(http.MethodGet, "/swagger/index.html", nil)
+	rec2 := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("GET /swagger/index.html status = %d, want 200", rec2.Code)
+	}
+	if !strings.Contains(rec2.Body.String(), "swagger") {
+		t.Fatalf("expected swagger in body, got: %s", rec2.Body.String()[:100])
+	}
+
+	// 3. /swagger/doc.json
+	req3 := httptest.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
+	rec3 := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusOK {
+		t.Fatalf("GET /swagger/doc.json status = %d, want 200", rec3.Code)
+	}
+	if !strings.Contains(rec3.Body.String(), "Go Backend Template API") {
+		t.Fatalf("expected API title in doc.json, got: %s", rec3.Body.String()[:100])
+	}
+}

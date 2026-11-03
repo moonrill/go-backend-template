@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/moonrill/go-backend-template/internal/shared/httpx"
 )
 
 // ReadinessCheck represents a named dependency health check evaluated by Ready.
@@ -23,18 +24,33 @@ func NewHealthHandler(checks ...ReadinessCheck) *HealthHandler {
 	}
 }
 
+// Live godoc
+// @Summary Liveness probe
+// @Description Checks whether the application process is running and responding to requests.
+// @Tags Health
+// @Produce json
+// @Success 200 {object} httpx.HealthResponse "Process is live"
+// @Router /health/live [get]
 func (h *HealthHandler) Live(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    gin.H{"status": "live"},
+	c.JSON(http.StatusOK, httpx.HealthResponse{
+		Success: true,
+		Data:    httpx.HealthData{Status: "live"},
 	})
 }
 
+// Ready godoc
+// @Summary Readiness probe
+// @Description Evaluates readiness of required infrastructure dependencies (PostgreSQL, Redis, MinIO).
+// @Tags Health
+// @Produce json
+// @Success 200 {object} httpx.HealthResponse "All required dependencies are ready"
+// @Failure 503 {object} httpx.ErrorResponse "One or more required dependencies are unavailable"
+// @Router /health/ready [get]
 func (h *HealthHandler) Ready(c *gin.Context) {
 	if len(h.checks) == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"data":    gin.H{"status": "ready"},
+		c.JSON(http.StatusOK, httpx.HealthResponse{
+			Success: true,
+			Data:    httpx.HealthData{Status: "ready"},
 		})
 		return
 	}
@@ -66,11 +82,11 @@ func (h *HealthHandler) Ready(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data": gin.H{
-			"status": "ready",
-			"checks": results,
+	c.JSON(http.StatusOK, httpx.HealthResponse{
+		Success: true,
+		Data: httpx.HealthData{
+			Status: "ready",
+			Checks: results,
 		},
 	})
 }

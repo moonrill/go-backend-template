@@ -37,13 +37,26 @@ func (e *ValidationError) Unwrap() error {
 
 // UserResponse is the public API representation of a user.
 type UserResponse struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	FullName  string    `json:"full_name"`
-	Role      string    `json:"role"`
-	IsActive  bool      `json:"is_active"`
+	ID        string    `json:"id" example:"a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"`
+	Email     string    `json:"email" example:"user@example.com"`
+	FullName  string    `json:"full_name" example:"Jane Doe"`
+	Role      string    `json:"role" example:"member"`
+	IsActive  bool      `json:"is_active" example:"true"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// UserSuccessResponse wraps UserResponse in standard JSON envelope.
+type UserSuccessResponse struct {
+	Success bool         `json:"success" example:"true"`
+	Data    UserResponse `json:"data"`
+}
+
+// UserListResponse wraps paginated UserResponse in standard JSON envelope.
+type UserListResponse struct {
+	Success bool           `json:"success" example:"true"`
+	Data    []UserResponse `json:"data"`
+	Meta    httpx.PageMeta `json:"meta"`
 }
 
 // CreateUserRequest is the payload for POST /api/v1/users.

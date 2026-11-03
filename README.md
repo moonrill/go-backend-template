@@ -27,6 +27,7 @@ The scaffold currently exposes:
 - `GET /api/v1/health/live`
 - `GET /api/v1/health/ready` (evaluates PostgreSQL, Redis, and MinIO readiness when their respective flags are enabled)
 - `GET /api/v1/users`, `GET /api/v1/users/:id`, `POST /api/v1/users`, `PATCH /api/v1/users/:id`, `DELETE /api/v1/users/:id` (when `DATABASE_ENABLED=true`; see [`docs/openapi.yaml`](docs/openapi.yaml))
+- `GET /swagger/index.html` (interactive Swagger UI API documentation, auto-redirected from `/swagger`)
 - `GET /metrics` when metrics are enabled
 - OpenTelemetry distributed tracing with OTLP exporter, W3C context propagation, trace-log correlation, and client instrumentation (PostgreSQL, Redis, MinIO)
 
@@ -49,6 +50,7 @@ make fmt
 make test
 make vet
 make build
+make swagger
 make run
 ```
 

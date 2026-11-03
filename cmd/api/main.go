@@ -1,5 +1,20 @@
 package main
 
+// @title Go Backend Template API
+// @version 1.0
+// @description Lightweight, modular Go REST API starter built with Gin, PostgreSQL, Redis, MinIO, and OpenTelemetry.
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.url https://github.com/moonrill/go-backend-template
+
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+
+// @host localhost:8080
+// @BasePath /api/v1
+// @schemes http https
+
 import (
 	"context"
 	"errors"

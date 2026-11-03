@@ -12,8 +12,34 @@ type PageMeta struct {
 
 // FieldError describes a validation error on a specific request field or query parameter.
 type FieldError struct {
-	Field   string `json:"field"`
-	Message string `json:"message"`
+	Field   string `json:"field" example:"email"`
+	Message string `json:"message" example:"email is required"`
+}
+
+// ErrorResponse represents a standard error response envelope.
+type ErrorResponse struct {
+	Success bool      `json:"success" example:"false"`
+	Error   ErrorInfo `json:"error"`
+}
+
+// HealthResponse represents a standard health check response envelope.
+type HealthResponse struct {
+	Success bool       `json:"success" example:"true"`
+	Data    HealthData `json:"data"`
+}
+
+// ErrorInfo represents structured error details in an error envelope.
+type ErrorInfo struct {
+	Code      string       `json:"code" example:"VALIDATION_ERROR"`
+	Message   string       `json:"message" example:"Request validation failed"`
+	RequestID string       `json:"request_id" example:"req_12345678-abcd"`
+	Details   []FieldError `json:"details,omitempty"`
+}
+
+// HealthData represents the status response payload of a health check.
+type HealthData struct {
+	Status string            `json:"status" example:"live"`
+	Checks map[string]string `json:"checks,omitempty"`
 }
 
 // JSONSuccess writes a standard JSON success envelope.
