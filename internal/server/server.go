@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/moonrill/go-backend-template/docs"
+	_ "github.com/moonrill/go-backend-template/docs"
 	"github.com/moonrill/go-backend-template/internal/config"
 	"github.com/moonrill/go-backend-template/internal/middleware"
 	"github.com/moonrill/go-backend-template/internal/modules/users"
@@ -125,22 +124,7 @@ func New(cfg config.Config, logger *slog.Logger, deps ...Dependencies) (*http.Se
 	router.GET("/swagger", func(c *gin.Context) {
 		c.Redirect(http.StatusMovedPermanently, "/swagger/index.html")
 	})
-	router.GET("/swagger/*any", func(c *gin.Context) {
-		scheme := "http"
-		if c.Request.TLS != nil {
-			scheme = "https"
-		}
-		if proto := c.GetHeader("X-Forwarded-Proto"); proto != "" {
-			scheme = strings.Split(proto, ",")[0]
-		}
-
-		if host := c.Request.Host; host != "" {
-			docs.SwaggerInfo.Host = host
-		}
-		docs.SwaggerInfo.Schemes = []string{scheme}
-
-		ginSwagger.WrapHandler(swaggerFiles.Handler)(c)
-	})
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	return &http.Server{
 		Addr:              ":" + cfg.Port,

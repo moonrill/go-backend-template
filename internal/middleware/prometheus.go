@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"errors"
+	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +17,28 @@ var (
 	requestDuration *prometheus.HistogramVec
 	metricsOnce     sync.Once
 )
+
+var allowedHTTPMethods = map[string]struct{}{
+	http.MethodGet:     {},
+	http.MethodHead:    {},
+	http.MethodPost:    {},
+	http.MethodPut:     {},
+	http.MethodPatch:   {},
+	http.MethodDelete:  {},
+	http.MethodConnect: {},
+	http.MethodOptions: {},
+	http.MethodTrace:   {},
+}
+
+// normalizeMethod maps incoming HTTP methods against a bounded allowlist.
+// Any unrecognized or arbitrary method string is collapsed to "UNKNOWN" to prevent cardinality explosion.
+func normalizeMethod(method string) string {
+	upper := strings.ToUpper(method)
+	if _, ok := allowedHTTPMethods[upper]; ok {
+		return upper
+	}
+	return "UNKNOWN"
+}
 
 // PrometheusMiddleware holds prometheus metrics collectors for HTTP traffic.
 type PrometheusMiddleware struct {
@@ -37,7 +61,7 @@ func NewPrometheusMiddleware(reg prometheus.Registerer) (*PrometheusMiddleware, 
 				Name: "http_requests_total",
 				Help: "Total number of HTTP requests processed.",
 			},
-			[]string{"method", "path", "status"},
+			[]string{"method", "route", "status"},
 		)
 
 		requestDuration = prometheus.NewHistogramVec(
@@ -90,18 +114,17 @@ func (m *PrometheusMiddleware) Handler() gin.HandlerFunc {
 
 		duration := time.Since(start).Seconds()
 
-		path := c.Request.URL.Path
 		route := c.FullPath()
 		if route == "" {
 			route = "UNMATCHED"
 		}
 
 		statusStr := strconv.Itoa(c.Writer.Status())
-		method := c.Request.Method
+		method := normalizeMethod(c.Request.Method)
 
 		m.requestCount.WithLabelValues(
 			method,
-			path,
+			route,
 			statusStr,
 		).Inc()
 

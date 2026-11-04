@@ -122,8 +122,10 @@ When `METRICS_ENABLED=true`, Prometheus metrics are exposed at `GET /metrics`.
 ### Core HTTP RED Metrics
 | Metric | Type | Labels | Description |
 | --- | --- | --- | --- |
-| `http_requests_total` | Counter | `method`, `path`, `status` | Total HTTP requests handled |
+| `http_requests_total` | Counter | `method`, `route`, `status` | Total HTTP requests handled |
 | `http_request_duration_seconds` | Histogram | `method`, `route`, `status` | Request latency in seconds |
+
+> **Cardinality & DoS Protection**: To prevent memory exhaustion attacks, metric labels are strictly bounded. The `route` label uses matched Gin route templates (e.g. `/api/v1/users/:id`), falling back to `UNMATCHED` for unrouted paths. HTTP methods are normalized against a bounded allowlist (`GET`, `POST`, `PUT`, `DELETE`, etc.), with unrecognized methods collapsed to `UNKNOWN`.
 
 In addition, standard Go runtime metrics (`go_goroutines`, `go_memstats_heap_alloc_bytes`) and process metrics (`process_cpu_seconds_total`, `process_resident_memory_bytes`) are automatically exported.
 
@@ -136,7 +138,7 @@ The repository provides a complete local observability stack in `compose.yaml` u
 | Service | Container Port | Host Port | Purpose |
 | --- | --- | --- | --- |
 | **Prometheus** | `9090` | `9090` | Metrics scraping and storage |
-| **Grafana** | `3000` | `3000` | Dashboards and visualization (`admin`/`admin`) |
+| **Grafana** | `3000` | `127.0.0.1:3000` | Dashboards and visualization (Admin login required) |
 | **Loki** | `3100` | `3100` | Log aggregation and indexing |
 | **Tempo** | `3200`, `4317`, `4318` | `3200` | Distributed tracing storage |
 | **Grafana Alloy** | `12345`, `4317`, `4318` | `12345`, `14317`, `14318` | Telemetry collector / log forwarder |
@@ -145,6 +147,7 @@ The repository provides a complete local observability stack in `compose.yaml` u
 ### Starting the Observability Stack
 
 ```bash
+# Ensure GRAFANA_ADMIN_PASSWORD is configured in .env before starting
 # Start the monitoring stack alongside PostgreSQL, Redis, and MinIO
 docker compose --profile monitoring --profile postgres --profile redis --profile minio up -d
 
@@ -153,8 +156,8 @@ docker compose --profile monitoring up -d api
 ```
 
 ### Accessing the Grafana Dashboard
-1. Open `http://localhost:3000` in your browser.
-2. Sign in with username `admin` and password `admin` (or view as anonymous if enabled).
+1. Open `http://localhost:3000` in your browser (bound to `127.0.0.1`).
+2. Sign in with username `admin` (or `GRAFANA_ADMIN_USER`) and the password configured via `GRAFANA_ADMIN_PASSWORD` in `.env`. Anonymous access is disabled by default.
 3. The **API Observability Dashboard** (`config/grafana/dashboard.json`) is automatically provisioned and includes:
    - Request Rate (RPS)
    - Latency Percentiles (P50, P95, P99)

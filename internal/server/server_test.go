@@ -2,11 +2,13 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -362,5 +364,103 @@ func TestServerSwaggerEndpoints(t *testing.T) {
 	}
 	if !strings.Contains(rec3.Body.String(), "Go Backend Template API") {
 		t.Fatalf("expected API title in doc.json, got: %s", rec3.Body.String()[:100])
+	}
+}
+
+func TestServerSwaggerMaliciousHostHeader(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	cfg := testConfig()
+
+	srv, err := New(cfg, logger)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	maliciousHosts := []string{
+		"evil.attacker.com",
+		"phishing-site.example.org:8443",
+		"169.254.169.254",
+		"localhost:8080/malicious",
+		`evil.com", "injected": "json`,
+	}
+
+	for _, malHost := range maliciousHosts {
+		req := httptest.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
+		req.Host = malHost
+		req.Header.Set("X-Forwarded-Proto", "evilproto")
+		rec := httptest.NewRecorder()
+
+		srv.Handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request with host %q returned status %d, want 200", malHost, rec.Code)
+		}
+
+		body := rec.Body.String()
+		if strings.Contains(body, malHost) {
+			t.Errorf("Swagger doc was poisoned with untrusted Host header %q", malHost)
+		}
+		if strings.Contains(body, "evilproto") {
+			t.Errorf("Swagger doc was poisoned with untrusted X-Forwarded-Proto header")
+		}
+	}
+
+	// Verify that legitimate subsequent request still sees static configured spec
+	normalReq := httptest.NewRequest(http.MethodGet, "/swagger/doc.json", nil)
+	normalRec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(normalRec, normalReq)
+
+	if normalRec.Code != http.StatusOK {
+		t.Fatalf("normal request status = %d, want 200", normalRec.Code)
+	}
+	if !strings.Contains(normalRec.Body.String(), "localhost:8080") {
+		t.Errorf("expected clean static host localhost:8080, got: %s", normalRec.Body.String())
+	}
+}
+
+func TestServerSwaggerConcurrentRequests(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	cfg := testConfig()
+
+	srv, err := New(cfg, logger)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	const goroutines = 50
+	const requestsPerGoroutine = 10
+	var wg sync.WaitGroup
+
+	errCh := make(chan error, goroutines*requestsPerGoroutine)
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for j := 0; j < requestsPerGoroutine; j++ {
+				var path string
+				if j%2 == 0 {
+					path = "/swagger/doc.json"
+				} else {
+					path = "/swagger/index.html"
+				}
+				req := httptest.NewRequest(http.MethodGet, path, nil)
+				req.Host = fmt.Sprintf("tenant-%d-%d.example.com", workerID, j)
+				req.Header.Set("X-Forwarded-Proto", "https")
+				rec := httptest.NewRecorder()
+
+				srv.Handler.ServeHTTP(rec, req)
+				if rec.Code != http.StatusOK {
+					errCh <- fmt.Errorf("worker %d req %d: unexpected status %d", workerID, j, rec.Code)
+					return
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Fatal(err)
 	}
 }
